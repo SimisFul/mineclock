@@ -1,0 +1,1 @@
+sudo cp -rp /home/pi/Documents/minecraft-pi-clock/resources/custom_data/data/ /opt/minecraft-pi/
