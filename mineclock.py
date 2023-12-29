@@ -980,8 +980,8 @@ column_blink_delay = 1
 column_visible = True
 
 mc.player.setting('autojump', False)
-#silly_lag_mode = 0
-silly_lag_mode = 6
+silly_lag_mode = 0
+#silly_lag_mode = 6
 
 clear_clock()
 
