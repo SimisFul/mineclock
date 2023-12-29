@@ -4,36 +4,21 @@ class ClockSettings(object):
 
 print('Initializing')
 
-import os
-os.system('modprobe uinput')
-import uinput
-
-device = uinput.Device([
-        uinput.BTN_LEFT,
-        uinput.BTN_RIGHT,
-        uinput.REL_X,
-        uinput.REL_Y,
-        uinput.KEY_1,
-        uinput.KEY_2,
-        uinput.KEY_3,
-        uinput.KEY_4,
-        uinput.KEY_5,
-        uinput.KEY_6,
-        uinput.KEY_7,
-        uinput.KEY_8,
-        uinput.KEY_W,
-        uinput.KEY_A,
-        uinput.KEY_S,
-        uinput.KEY_D,
-        uinput.KEY_E,
-        uinput.KEY_ENTER,
-        uinput.KEY_SPACE,
-        ])
-
-import time, math, random
 import mcpi.minecraft as minecraft
 import mcpi.block as block
-import minecraftstuff
+import time, math, random
+
+game_linked = False
+
+while not game_linked:
+    try:
+        mc = minecraft.Minecraft.create()
+        player_id = mc.getPlayerEntityIds()[0]
+        game_linked = True
+    except Exception:
+        print('Waiting for minecraft-pi...')
+        time.sleep(0.1)
+        game_linked = False
 
 def chat(message=''):
     print('<chat> ' + str(message))
@@ -50,7 +35,7 @@ def get_y(y):
 
 def wait_for_kb_and_mouse():
     #original_pos = mc.player.getPos()
-    p_head = [20, 41, -3]
+    """p_head = [20, 41, -3]
     blocks_to_break = [[p_head[0] + 1, p_head[1], p_head[2]],
                        [p_head[0], p_head[1], p_head[2] + 1],
                        [p_head[0] - 1, p_head[1], p_head[2]], 
@@ -74,10 +59,20 @@ def wait_for_kb_and_mouse():
         
         for test_block in blocks_to_break:
             if mc.getBlock(test_block[0], test_block[1], test_block[2]) == 0:
-                block_broken = True
+                block_broken = True"""
     
-    reset_camera()
-    mc.player.setTilePos([test_loc[0], 1, test_loc[1]])
+    draw_hidden_block()
+    
+    block_broken = False
+    
+    while not block_broken:
+        device.emit(uinput.BTN_LEFT, 1)
+        time.sleep(1)
+        device.emit(uinput.BTN_LEFT, 0)
+
+        if mc.getBlock(get_x(12), camera_height - 5, get_y(7)) == block.AIR.id:
+            block_broken = True
+    
     
     first_pos = mc.player.getPos()
     second_pos = mc.player.getPos()
@@ -100,7 +95,7 @@ def reset_camera():
         mc.camera.setFollow(player_id)
     else:
         mc.camera.setFixed()
-        mc.camera.setPos([get_x(12.04), 10, get_y(7.04)])
+        mc.camera.setPos([get_x(12.04), camera_height, get_y(7.04)])
         #mc.camera.setPos([get_x(18.04), 6, get_y(7.04)])
     #mc.camera.setPos([-12.04, 20, -7.04])
     
@@ -162,8 +157,8 @@ def get_orientation(stay_visible=False):
         distance_traveled = round(math.sqrt((first_pos.x - second_pos.x) ** 2.0 + (first_pos.z - second_pos.z) ** 2.0), 1)
         #chat(str(distance_traveled) + '  ' + str(angle_deg))
         
-        if first_pos == second_pos and ClockSettings.DEBUG:
-            chat('ERROR - get_orientation: Player didn\'t move!')
+        #if first_pos == second_pos and ClockSettings.DEBUG:
+            #chat('ERROR - get_orientation: Player didn\'t move!')
             #angle_deg = get_orientation()
     
     device.emit(uinput.KEY_W, 0)
@@ -179,6 +174,9 @@ def set_orientation(h_view, v_view=-1):
     if v_view != -1:
         # TODO: Look completely up (0) and move until approximate angle
         pass
+    
+    original_pos = mc.player.getPos()
+    mc.player.setTilePos([test_loc[0], 1, test_loc[1]])
     
     stop_player()
     current_h_view = get_orientation(stay_visible=False)
@@ -200,6 +198,7 @@ def set_orientation(h_view, v_view=-1):
         current_h_view = get_orientation(stay_visible=False)
         movement = int(h_view) - int(current_h_view)
         
+    mc.player.setTilePos(original_pos)
         #if ClockSettings.DEBUG:
         #    chat(current_h_view)
     
@@ -240,13 +239,26 @@ def walk(distance, backwards=False):
             if int(current_pos.x * 10) == current_pos.x * 10 or int(current_pos.z * 10) == current_pos.z * 10:
                 if abs(int(current_pos.x * 10)) % 10 == 3 or abs(int(current_pos.x * 10)) % 10 == 7 or abs(int(current_pos.z * 10)) % 10 == 3 or abs(int(current_pos.z * 10)) % 10 == 7:
                     device.emit(key, 0)
+                    
+                    if abs(current_pos.x) == 127.7 or abs(current_pos.z) == 127.7:
+                        chat('Player hit the border of the map, cancelling walk...')
+                        return
+                    
                     time.sleep(0.2)
                     device.emit(key, 1)
                     time.sleep(0.1)
                     device.emit(uinput.KEY_SPACE, 1)
                     
+                    wait_start = time.time()
+                    
                     while before_pos.y + 1 > current_pos.y:
                         current_pos = mc.player.getPos()
+                        
+                        if time.time() - wait_start > 5:
+                            device.emit(uinput.KEY_SPACE, 0)
+                            time.sleep(0.2)
+                            device.emit(uinput.KEY_SPACE, 1)
+                            wait_start = time.time()
                         
                     device.emit(uinput.KEY_SPACE, 0)
                     
@@ -329,13 +341,26 @@ def walk_to(dest_x, dest_y):
                     if int(current_pos.x * 10) == current_pos.x * 10 or int(current_pos.z * 10) == current_pos.z * 10:
                         if abs(int(current_pos.x * 10)) % 10 == 3 or abs(int(current_pos.x * 10)) % 10 == 7 or abs(int(current_pos.z * 10)) % 10 == 3 or abs(int(current_pos.z * 10)) % 10 == 7:
                             device.emit(key, 0)
+                            
+                            if abs(current_pos.x) == 127.7 or abs(current_pos.z) == 127.7:
+                                chat('Player hit the border of the map, cancelling walk...')
+                                return
+                            
                             time.sleep(0.2)
                             device.emit(key, 1)
                             time.sleep(0.1)
                             device.emit(uinput.KEY_SPACE, 1)
                             
+                            wait_start = time.time()
+                            
                             while before_pos.y + 1 > current_pos.y:
                                 current_pos = mc.player.getPos()
+                                
+                                if time.time() - wait_start > 5:
+                                    device.emit(uinput.KEY_SPACE, 0)
+                                    time.sleep(0.2)
+                                    device.emit(uinput.KEY_SPACE, 1)
+                                    wait_start = time.time()
                                 
                             device.emit(uinput.KEY_SPACE, 0)
                             
@@ -423,6 +448,8 @@ def clear_clock():
     mc.setBlocks(test_loc[0] + 10, 0, test_loc[1] + 10, test_loc[0] - 10, 5, test_loc[1] - 10, block.AIR.id)
     mc.setBlocks(top_left[0] + 5, 0, top_left[1] + 5, get_x(30), 0, get_y(20), block.GLASS.id)
     mc.setBlocks(test_loc[0] + 10, 0, test_loc[1] + 10, test_loc[0] - 10, 0, test_loc[1] - 10, block.GLASS.id)
+    # Uncomment to make lag lol
+    # mc.setBlocks(top_left[0] + 5, -1, top_left[1] + 5, get_x(30), -1, get_y(20), block.WATER.id, 1)
     
 
 def toggle_column():
@@ -470,10 +497,10 @@ def draw_number(number, position):
         set_orientation(270)
         mc.player.setTilePos(get_x(corner[0] + math.floor(number_width/2)), 1, get_y(15))
         
-        mc.setBlock(get_x(12), 5, get_y(7), 59, 0)
+        draw_hidden_block()
         
-        walk(mc.player.getPos().z - get_y(corner[1] + number_height + 1))
-        walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(corner[1] + number_height + 1))
+        walk(get_y(corner[1] + number_height + 1) - mc.player.getPos().z)
+        #walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(corner[1] + number_height + 1))
         
         for it_y in range(number_height):
             for it_x in range(number_width):
@@ -481,16 +508,17 @@ def draw_number(number, position):
                     device.emit(uinput.BTN_LEFT, 1)
                     time.sleep(0.1)
                     device.emit(uinput.BTN_LEFT, 0)
-                    mc.setBlock(get_x(12), 5, get_y(7), 59, 0)
+                    draw_hidden_block()
                     mc.setBlock(get_x(it_x + corner[0]), 1, get_y(corner[1] + number_height - it_y - 1), block.AIR.id)
             
-            if mc.player.getPos().z < get_y(corner[1] + number_height - it_y):
-                walk(get_y(corner[1] + number_height - it_y) - mc.player.getPos().z)
-            else:
+            if 3 < math.sqrt((get_x(corner[0] + math.floor(number_width/2)) - mc.player.getPos().x) ** 2.0 + (get_y(corner[1] + number_height - it_y) - mc.player.getPos().z) ** 2.0):
+                # We're too far from where we should be going to
+                set_orientation(270)
                 walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(corner[1] + number_height - it_y))
+            else:
+                walk(get_y(corner[1] + number_height - it_y) - mc.player.getPos().z)
         
         #walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(-2))
-        mc.setBlock(get_x(12), 5, get_y(7), block.AIR.id)
         walk(get_y(-2) - mc.player.getPos().z)
 
         transition = None    
@@ -674,7 +702,7 @@ def draw_number(number, position):
     # --------------------------------------------------------------- Draw transitions ---------------------------------------------------------------
     
     if transition is None:
-        transition = transitions['draw'][random.randint(0, len(transitions['draw']) - 1)] if not ClockSettings.DEBUG else 'lava'
+        transition = transitions['draw'][random.randint(0, len(transitions['draw']) - 1)] if not ClockSettings.DEBUG else 'player_place'
     
     if active_numbers[position]['transition'] is None:
         transition = None
@@ -684,18 +712,21 @@ def draw_number(number, position):
             set_orientation(270)
             mc.player.setTilePos(get_x(corner[0] + math.floor(number_width/2)), 1, get_y(-2))
             device.emit_click(uinput.KEY_2)
+            mc.setBlock(get_x(12), camera_height - 5, get_y(7), block.AIR.id)
             
             walk(mc.player.getPos().z - get_y(corner[1] - 1), backwards=True)
-            walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(corner[1] - 1))
+            #walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(corner[1] - 1))
         
             device.emit(uinput.BTN_LEFT, 1)
             for it_y in range(number_height + 2):
-                if mc.player.getPos().z > get_y(corner[1] + it_y):
-                    walk(mc.player.getPos().z - get_y(corner[1] + it_y), backwards=True)
-                else:
+                if 3 < math.sqrt((get_x(corner[0] + math.floor(number_width/2)) - mc.player.getPos().x) ** 2.0 + (get_y(corner[1] + it_y) - mc.player.getPos().z) ** 2.0):
+                    # We're too far from where we should be going to
+                    set_orientation(270)
                     walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(corner[1] + it_y))
+                else:
+                    walk(mc.player.getPos().z - get_y(corner[1] + it_y), backwards=True)
                     
-                mc.setBlock(get_x(12), 5, get_y(7), 59, 0)
+                draw_hidden_block()
                 for it_x in range(number_width + 2):
                     time.sleep(0.05)
                     if 0 < it_y <= number_height and 0 < it_x <= number_width:
@@ -706,15 +737,14 @@ def draw_number(number, position):
                     else:
                         mc.setBlock(get_x(corner[0] + it_x - 1), 1, get_y(corner[1] + it_y - 1), block.COBBLESTONE.id)
             
-            mc.setBlock(get_x(12), 5, get_y(7), block.AIR.id)
             device.emit(uinput.BTN_LEFT, 0)
             walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(corner[1] + number_height + 2))
+            
+            device.emit_click(uinput.KEY_1)
             
             mc.setBlocks(get_x(corner[0]), 3, get_y(corner[1]), get_x(corner[0] + number_width - 1), 3, get_y(corner[1] + number_height - 1), block.WATER.id, 1)
             time.sleep(0.5)
             mc.setBlocks(get_x(corner[0] - 1), 1, get_y(corner[1] - 1), get_x(corner[0] + number_width), 1, get_y(corner[1] + number_height), block.WATER.id, 1)
-
-            device.emit_click(uinput.KEY_1)
 
             for it_y in range(number_height):
                 for it_x in range(number_width):
@@ -743,29 +773,31 @@ def draw_number(number, position):
             set_orientation(270)
             chosen_block = get_good_block()
             
-            mc.setBlock(get_x(12), 5, get_y(7), 59, 0)
+            draw_hidden_block()
             
             walk(mc.player.getPos().z - get_y(corner[1] - 2), backwards=True)
-            walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(corner[1] - 2))
+            #walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(corner[1] - 2))
         
             for it_y in range(number_height):
-                if mc.player.getPos().z > get_y(corner[1] + it_y):
-                    walk(mc.player.getPos().z - get_y(corner[1] + it_y), backwards=True)
-                else:
+                if 3 < math.sqrt((get_x(corner[0] + math.floor(number_width/2)) - mc.player.getPos().x) ** 2.0 + (get_y(corner[1] + it_y) - mc.player.getPos().z) ** 2.0):
+                    # We're too far from where we should be going to
+                    set_orientation(270)
                     walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(corner[1] + it_y))
+                else:
+                    walk(mc.player.getPos().z - get_y(corner[1] + it_y), backwards=True)
+                    
                     
                 for it_x in range(number_width):
                     if number_dict[number][it_y][it_x] == '#':
                         device.emit(uinput.BTN_LEFT, 1)
                         time.sleep(0.1)
                         device.emit(uinput.BTN_LEFT, 0)
-                        mc.setBlock(get_x(12), 5, get_y(7), 59, 0)
+                        draw_hidden_block()
                         mc.setBlock(get_x(it_x + corner[0]), 1, get_y(corner[1] + it_y), chosen_block['id'], chosen_block['data'])
                         if chosen_block['id'] == block.ICE.id:
                             mc.setBlock(get_x(it_x + corner[0]), 2, get_y(corner[1] + it_y), block.SNOW.id)
 
             
-            mc.setBlock(get_x(12), 5, get_y(7), block.AIR.id)
             walk(mc.player.getPos().z - get_y(15), backwards=True)
                         
             active_numbers[position]['block'] = chosen_block['id']
@@ -776,16 +808,23 @@ def draw_number(number, position):
             else:
                 transition = None
     
+    # Almost invisible wheat crop as exit button
+    draw_hidden_block()
+    
     if transition is None:
         transition = transitions['clear'][random.randint(0, len(transitions['clear']) - 1)]
 
     active_numbers[position]['number'] = number
     active_numbers[position]['transition'] = transition
-    
+
+
+def draw_hidden_block():
+    mc.setBlock(get_x(12), camera_height - 5, get_y(7), 59, 0)
+
 
 def load_models():
-    if ClockSettings.DEBUG:
-        chat('Loading models...')
+    #if ClockSettings.DEBUG:
+        #chat('Loading models...')
 
     for model in models.values():
         height = 1
@@ -850,17 +889,14 @@ def sleep_compensate(start_time, sleep_time):
         time.sleep(sleep_time - time_passed)
 
 
-game_linked = False
-
-while not game_linked:
-    try:
-        mc = minecraft.Minecraft.create()
-        player_id = mc.getPlayerEntityIds()[0]
-        game_linked = True
-    except Exception:
-        print('Waiting for minecraft-pi...')
+def check_for_exit():
+    if ClockSettings.DEBUG:
         time.sleep(1)
-        game_linked = False
+        
+    if mc.getBlock(get_x(12), camera_height - 5, get_y(7)) == block.AIR.id:
+        chat(' Exiting...')
+        #os.system('pkill -9 minecraft-pi')
+        exit()
 
 
 if ClockSettings.DEBUG:
@@ -868,6 +904,7 @@ if ClockSettings.DEBUG:
 
 screen_width = 25
 screen_height = 15
+camera_height = 10
 
 top_left = [0, 0]
 test_loc = [get_x(-5), get_y(-5)]
@@ -942,29 +979,57 @@ models = {'snow_plow': {'pos': [38.5, 0, -31.5], 'width': 0, 'height': 0, 'depth
 column_blink_delay = 1
 column_visible = True
 
-hours = time.strftime("%H")
-minutes = time.strftime("%M")
-seconds = time.strftime("%S")
-
-seconds_passed = 0
-
-# View debug area
-#mc.camera.setPos([test_loc[0], 15, test_loc[1]])
-
 mc.player.setting('autojump', False)
+#silly_lag_mode = 0
+silly_lag_mode = 6
+
 clear_clock()
 
 # ":" in the middle
 toggle_column()
+
+hours = time.strftime("%H")
+minutes = time.strftime("%M")
+#seconds = time.strftime("%S")
 
 draw_number(int(hours[0]), 0)
 draw_number(int(hours[1]), 1)
 draw_number(int(minutes[0]), 2)
 draw_number(int(minutes[1]), 3)
 
- 
-if not ClockSettings.DEBUG: 
-    wait_for_kb_and_mouse()
+reset_camera()
+            
+mc.player.setTilePos([test_loc[0], 1, test_loc[1]])
+
+import os
+os.system('modprobe uinput')
+import uinput
+
+device = uinput.Device([
+        uinput.BTN_LEFT,
+        uinput.BTN_RIGHT,
+        uinput.REL_X,
+        uinput.REL_Y,
+        uinput.KEY_1,
+        uinput.KEY_2,
+        uinput.KEY_3,
+        uinput.KEY_4,
+        uinput.KEY_5,
+        uinput.KEY_6,
+        uinput.KEY_7,
+        uinput.KEY_8,
+        uinput.KEY_W,
+        uinput.KEY_A,
+        uinput.KEY_S,
+        uinput.KEY_D,
+        uinput.KEY_E,
+        uinput.KEY_ENTER,
+        uinput.KEY_SPACE,
+        ])
+
+import minecraftstuff
+
+wait_for_kb_and_mouse()
     
 #prepare_hotbar()
 
@@ -973,11 +1038,19 @@ device.emit(uinput.KEY_S, 0)
 device.emit(uinput.KEY_A, 0)
 device.emit(uinput.KEY_D, 0)
 device.emit(uinput.KEY_SPACE, 0)
+device.emit(uinput.BTN_LEFT, 0)
+device.emit(uinput.BTN_RIGHT, 0)
 
-reset_camera()
+# Exit "button"
+draw_hidden_block()
 
-mc.player.setTilePos([test_loc[0], 1, test_loc[1]])
+set_orientation(270)
 current_orientation = get_orientation()
+
+if silly_lag_mode:
+    chat('Lag mode enabled, you\'re welcome I guess...')
+    for it in range(0, screen_width, silly_lag_mode):
+        mc.setBlocks(get_x(it), -1, get_y(0), get_x(it), -64, get_x(screen_height - 1), block.WATER.id, 1)
 
 load_models()
 
@@ -995,34 +1068,41 @@ while True:
     if time_since_blink >= column_blink_delay:
         time_since_blink = 0
         toggle_column()
-    
+        
+    check_for_exit()
     
     if hours[0] != str(active_numbers[0]['number']):
         draw_number(int(hours[0]), 0)
         mc.player.setTilePos([test_loc[0], 1, test_loc[1]])
+        toggle_column()
         hours = time.strftime("%H")
         minutes = time.strftime("%M")
         
     if hours[1] != str(active_numbers[1]['number']):
         draw_number(int(hours[1]), 1)
         mc.player.setTilePos([test_loc[0], 1, test_loc[1]])
+        toggle_column()
         hours = time.strftime("%H")
         minutes = time.strftime("%M")
         
     if minutes[0] != str(active_numbers[2]['number']):
         draw_number(int(minutes[0]), 2)
         mc.player.setTilePos([test_loc[0], 1, test_loc[1]])
+        toggle_column()
         hours = time.strftime("%H")
         minutes = time.strftime("%M")
 
     if minutes[1] != str(active_numbers[3]['number']) or ClockSettings.DEBUG:
         if ClockSettings.DEBUG: 
-            active_numbers[3]['transition'] = 'snow_plow'
+            active_numbers[3]['transition'] = 'player_break'
             
         draw_number(int(minutes[1]), 3)
         mc.player.setTilePos([test_loc[0], 1, test_loc[1]])
-        hours = time.strftime("%H")
-        minutes = time.strftime("%M")
+        
+        if silly_lag_mode:
+            for it in range(0, screen_width, silly_lag_mode):
+                mc.setBlocks(get_x(it), -1, get_y(0), get_x(it), -1, get_x(screen_height - 1), block.WATER.id, 1)
+
     
     
     loop_duration = time.time() - loop_start_time
