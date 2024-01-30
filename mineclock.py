@@ -239,11 +239,6 @@ def walk(distance, backwards=False):
             if int(current_pos.x * 10) == current_pos.x * 10 or int(current_pos.z * 10) == current_pos.z * 10:
                 if abs(int(current_pos.x * 10)) % 10 == 3 or abs(int(current_pos.x * 10)) % 10 == 7 or abs(int(current_pos.z * 10)) % 10 == 3 or abs(int(current_pos.z * 10)) % 10 == 7:
                     device.emit(key, 0)
-                    
-                    if abs(current_pos.x) == 127.7 or abs(current_pos.z) == 127.7:
-                        chat('Player hit the border of the map, cancelling walk...')
-                        return
-                    
                     time.sleep(0.2)
                     device.emit(key, 1)
                     time.sleep(0.1)
@@ -254,7 +249,19 @@ def walk(distance, backwards=False):
                     while before_pos.y + 1 > current_pos.y:
                         current_pos = mc.player.getPos()
                         
+                        if current_pos.y < before_pos.y:
+                            # Rare edge cases caused by leftover blocks and water when lagging heavily, essentially causing a softlock
+                            before_pos = current_pos
+                            # mc.setBlock(get_x(12), 0, get_y(5), block.LAPIS_LAZULI_BLOCK.id)
+                        
+                        if abs(current_pos.x) == 127.7 or abs(current_pos.z) == 127.7:
+                            # mc.setBlock(get_x(12), 0, get_y(7), block.BEDROCK.id)
+                            device.emit(key, 0)
+                            # chat('Softlock prevention triggered :/')
+                            return
+                        
                         if time.time() - wait_start > 5:
+                            # chat('Resetting space...')
                             device.emit(uinput.KEY_SPACE, 0)
                             time.sleep(0.2)
                             device.emit(uinput.KEY_SPACE, 1)
@@ -324,11 +331,13 @@ def walk_to(dest_x, dest_y):
                 while before_pos == current_pos:
                     current_pos = mc.player.getPos()
                     
-                    if time.time() - wait_start > 0.5:
-                        device.emit(key, 0)
+                    if time.time() - wait_start > 1:
+                        # mc.setBlock(get_x(12), 0, get_y(9), block.GOLD_BLOCK.id)
+                        break
+                        """device.emit(key, 0)
                         time.sleep(0.2)
                         device.emit(key, 1)
-                        wait_start = time.time()
+                        wait_start = time.time()"""
                     
                     
                 last_dist = dist
@@ -341,11 +350,6 @@ def walk_to(dest_x, dest_y):
                     if int(current_pos.x * 10) == current_pos.x * 10 or int(current_pos.z * 10) == current_pos.z * 10:
                         if abs(int(current_pos.x * 10)) % 10 == 3 or abs(int(current_pos.x * 10)) % 10 == 7 or abs(int(current_pos.z * 10)) % 10 == 3 or abs(int(current_pos.z * 10)) % 10 == 7:
                             device.emit(key, 0)
-                            
-                            if abs(current_pos.x) == 127.7 or abs(current_pos.z) == 127.7:
-                                chat('Player hit the border of the map, cancelling walk...')
-                                return
-                            
                             time.sleep(0.2)
                             device.emit(key, 1)
                             time.sleep(0.1)
@@ -356,7 +360,19 @@ def walk_to(dest_x, dest_y):
                             while before_pos.y + 1 > current_pos.y:
                                 current_pos = mc.player.getPos()
                                 
+                                if current_pos.y < before_pos.y:
+                                    # Rare edge cases caused by leftover blocks and water when lagging heavily, essentially causing a softlock
+                                    before_pos = current_pos
+                                    # mc.setBlock(get_x(12), 0, get_y(5), block.LAPIS_LAZULI_BLOCK.id)
+                                
+                                if abs(current_pos.x) == 127.7 or abs(current_pos.z) == 127.7:
+                                    # mc.setBlock(get_x(12), 0, get_y(7), block.BEDROCK.id)
+                                    device.emit(key, 0)
+                                    # chat('Softlock prevention triggered :/')
+                                    return
+                                    
                                 if time.time() - wait_start > 5:
+                                    # chat('Resetting space...')
                                     device.emit(uinput.KEY_SPACE, 0)
                                     time.sleep(0.2)
                                     device.emit(uinput.KEY_SPACE, 1)
@@ -541,6 +557,9 @@ def draw_number(number, position):
         transition = None
         
     elif transition == 'snow_melt':
+        if slow_water_mode:
+            slow_down_water()
+            
         for it_y in range(number_height):
             for it_x in range(number_width):
                 if number_dict[active_numbers[position]['number']][it_y][it_x] == '#':
@@ -692,8 +711,8 @@ def draw_number(number, position):
             sleep_compensate(rotation_start, 0.075)
             
 
-        mc.setBlocks(get_x(corner[0]), 0, get_y(corner[1] - 1), get_x(corner[0] + number_width - 1), 0, get_y(corner[1] + number_height - 1), block.GLASS.id)
-        mc.setBlocks(get_x(corner[0]), -1, get_y(corner[1] - 1), get_x(corner[0] + number_width - 1), -number_height, get_y(corner[1] + number_height - 1), block.AIR.id)
+        mc.setBlocks(get_x(corner[0] - 1), 0, get_y(corner[1] - 1), get_x(corner[0] + number_width), 0, get_y(corner[1] + number_height), block.GLASS.id)
+        mc.setBlocks(get_x(corner[0] - 1), -1, get_y(corner[1] - 1), get_x(corner[0] + number_width), -number_height, get_y(corner[1] + number_height), block.AIR.id)
                 
         transition = None
     
@@ -702,7 +721,7 @@ def draw_number(number, position):
     # --------------------------------------------------------------- Draw transitions ---------------------------------------------------------------
     
     if transition is None:
-        transition = transitions['draw'][random.randint(0, len(transitions['draw']) - 1)] if not ClockSettings.DEBUG else 'player_place'
+        transition = transitions['draw'][random.randint(0, len(transitions['draw']) - 1)] if not ClockSettings.DEBUG else 'lava'
     
     if active_numbers[position]['transition'] is None:
         transition = None
@@ -741,6 +760,9 @@ def draw_number(number, position):
             walk_to(get_x(corner[0] + math.floor(number_width/2)), get_y(corner[1] + number_height + 2))
             
             device.emit_click(uinput.KEY_1)
+            
+            if slow_water_mode:
+                slow_down_water()
             
             mc.setBlocks(get_x(corner[0]), 3, get_y(corner[1]), get_x(corner[0] + number_width - 1), 3, get_y(corner[1] + number_height - 1), block.WATER.id, 1)
             time.sleep(0.5)
@@ -899,12 +921,17 @@ def check_for_exit():
         exit()
 
 
+def slow_down_water():
+    mc.setBlocks(test_loc[0] - 4, water_container_height + 5, test_loc[1] - 4, test_loc[0] + 4, water_container_height + 5, test_loc[1] + 4, block.WATER.id, 1)
+    
+
 if ClockSettings.DEBUG:
     chat('Debug mode')
 
 screen_width = 25
 screen_height = 15
 camera_height = 10
+#camera_height = 30
 
 top_left = [0, 0]
 test_loc = [get_x(-5), get_y(-5)]
@@ -982,6 +1009,8 @@ column_visible = True
 mc.player.setting('autojump', False)
 silly_lag_mode = 0
 #silly_lag_mode = 6
+slow_water_mode = False
+water_container_height = 10
 
 clear_clock()
 
@@ -1000,6 +1029,15 @@ draw_number(int(minutes[1]), 3)
 reset_camera()
             
 mc.player.setTilePos([test_loc[0], 1, test_loc[1]])
+
+if slow_water_mode:
+    mc.setBlocks(test_loc[0] - 5, water_container_height, test_loc[1] - 5, test_loc[0] + 5, water_container_height, test_loc[1] + 5, block.GLASS.id)
+    mc.setBlocks(test_loc[0] - 5, water_container_height + 1, test_loc[1] - 5, test_loc[0] - 5, water_container_height + 5, test_loc[1] + 5, block.GLASS.id)
+    mc.setBlocks(test_loc[0] - 5, water_container_height + 1, test_loc[1] - 5, test_loc[0] + 5, water_container_height + 5, test_loc[1] - 5, block.GLASS.id)
+    mc.setBlocks(test_loc[0] + 5, water_container_height + 1, test_loc[1] - 5, test_loc[0] + 5, water_container_height + 5, test_loc[1] + 5, block.GLASS.id)
+    mc.setBlocks(test_loc[0] - 5, water_container_height + 1, test_loc[1] + 5, test_loc[0] + 5, water_container_height + 5, test_loc[1] + 5, block.GLASS.id)
+    
+    
 
 import os
 os.system('modprobe uinput')
@@ -1057,7 +1095,6 @@ load_models()
 loop_duration = 0
 time_since_blink = column_blink_delay
 
-
 while True:
     loop_start_time = time.time()
     hours = time.strftime("%H")
@@ -1094,7 +1131,7 @@ while True:
 
     if minutes[1] != str(active_numbers[3]['number']) or ClockSettings.DEBUG:
         if ClockSettings.DEBUG: 
-            active_numbers[3]['transition'] = 'player_break'
+            active_numbers[3]['transition'] = 'trapdoor'
             
         draw_number(int(minutes[1]), 3)
         mc.player.setTilePos([test_loc[0], 1, test_loc[1]])
